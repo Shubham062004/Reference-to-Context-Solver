@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Reference to Context Solver",
+  "version": "1.0",
+  "description": "Extract comprehension questions and MCQs from screenshots using AI",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Reference to Context Solver",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://your-render-url.onrender.com/*"
+  ]
+}

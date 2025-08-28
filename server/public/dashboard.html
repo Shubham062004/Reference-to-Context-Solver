@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCQ Extractor Dashboard</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5; 
+        }
+        .header {
+            background: #000;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .question-set { 
+            background: white;
+            border: 1px solid #ddd; 
+            margin: 15px 0; 
+            padding: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .answers { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+        .comprehension {
+            background: #fff3cd;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            border-left: 4px solid #ffc107;
+        }
+        .questions-list {
+            margin: 15px 0;
+        }
+        .question-item {
+            background: #e9ecef;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .clear-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .clear-btn:hover {
+            background: #c82333;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>MCQ Extraction Dashboard</h1>
+            <p>Powered by Gemini AI</p>
+        </div>
+        <button class="clear-btn" onclick="clearData()">Clear All Data</button>
+    </div>
+    
+    <div class="stats" id="stats-container">
+        <div class="stat-card">
+            <h3 id="total-sessions">0</h3>
+            <p>Total Sessions</p>
+        </div>
+        <div class="stat-card">
+            <h3 id="total-questions">0</h3>
+            <p>Questions Processed</p>
+        </div>
+        <div class="stat-card">
+            <h3 id="total-screenshots">0</h3>
+            <p>Screenshots Captured</p>
+        </div>
+    </div>
+    
+    <div id="data-container">Loading...</div>
+    
+    <script>
+        function loadData() {
+            fetch('/api/data')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('data-container');
+                    
+                    // Update stats
+                    document.getElementById('total-sessions').textContent = data.length;
+                    document.getElementById('total-questions').textContent = 
+                        data.reduce((sum, item) => sum + (item.questions?.length || 0), 0);
+                    document.getElementById('total-screenshots').textContent = 
+                        data.reduce((sum, item) => sum + (item.screenshotCount || 0), 0);
+                    
+                    if (data.length === 0) {
+                        container.innerHTML = '<div class="question-set"><p>No data available. Start extracting questions!</p></div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.reverse().map(item => `
+                        <div class="question-set">
+                            <h3>Session ${item.id}</h3>
+                            <div class="timestamp">
+                                <strong>Time:</strong> ${new Date(item.timestamp).toLocaleString()}<br>
+                                <strong>Screenshots:</strong> ${item.screenshotCount} | 
+                                <strong>AI Provider:</strong> ${item.aiProvider || 'Unknown'}
+                            </div>
+                            
+                            ${item.comprehension ? `
+                                <div class="comprehension">
+                                    <strong>Comprehension:</strong><br>
+                                    ${item.comprehension}
+                                </div>
+                            ` : ''}
+                            
+                            ${item.questions && item.questions.length > 0 ? `
+                                <div class="questions-list">
+                                    <strong>Questions Extracted:</strong>
+                                    ${item.questions.map((q, index) => `
+                                        <div class="question-item">
+                                            <strong>Q${index + 1}:</strong> ${q.question}<br>
+                                            <strong>Options:</strong> ${q.options.join(', ')}<br>
+                                            <strong>Correct:</strong> <span style="color: green; font-weight: bold;">${q.correct_option || 'Not found'}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            <div class="answers">
+                                <strong>Quick Answers:</strong><br>
+                                ${item.answers && item.answers.length > 0 ? 
+                                    item.answers.map((answer, index) => 
+                                        `${index + 1}. ${answer}`
+                                    ).join(' | ') : 'No answers extracted'
+                                }
+                            </div>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => {
+                    document.getElementById('data-container').innerHTML = 
+                        '<div class="question-set"><p style="color: red;">Error loading data: ' + error.message + '</p></div>';
+                });
+        }
+        
+        function clearData() {
+            if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                fetch('/api/clear', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            loadData(); // Reload the empty data
+                            alert('Data cleared successfully!');
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error clearing data: ' + error.message);
+                    });
+            }
+        }
+        
+        // Load data on page load
+        loadData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
