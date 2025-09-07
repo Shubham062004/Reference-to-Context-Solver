@@ -170,6 +170,14 @@ function initializePopupFunctionality() {
     const testBtn = document.getElementById('test-btn');
     const closeBtn = document.getElementById('close-btn');
     
+    // Dynamic server URL detection
+    const SERVERS = [
+        'https://reference-to-context-solver.onrender.com',
+        'http://localhost:3000'
+    ];
+    
+    let activeServer = SERVERS[0]; // Default to Render
+    
     captureBtn.addEventListener('click', captureScreenshot);
     startBtn.addEventListener('click', processScreenshots);
     testBtn.addEventListener('click', testServer);
@@ -177,6 +185,26 @@ function initializePopupFunctionality() {
     
     function updateStatus(status) {
         answerArea.textContent = status;
+    }
+    
+    // Test which server is available
+    async function findActiveServer() {
+        for (const server of SERVERS) {
+            try {
+                const response = await fetch(`${server}/api/test`, {
+                    method: 'GET',
+                    timeout: 5000
+                });
+                if (response.ok) {
+                    activeServer = server;
+                    console.log(`Active server found: ${activeServer}`);
+                    return server;
+                }
+            } catch (error) {
+                console.log(`Server ${server} is not available:`, error.message);
+            }
+        }
+        return null;
     }
     
     function captureScreenshot() {
@@ -204,10 +232,19 @@ function initializePopupFunctionality() {
             return;
         }
         
+        updateStatus('Finding server...');
+        
+        // Find active server first
+        const server = await findActiveServer();
+        if (!server) {
+            updateStatus('No server available');
+            return;
+        }
+        
         updateStatus('Processing...');
         
         try {
-            const response = await fetch('http://localhost:3000/api/process-mcq', {
+            const response = await fetch(`${activeServer}/api/process-mcq`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -244,22 +281,19 @@ function initializePopupFunctionality() {
         }
     }
     
-    function testServer() {
-        updateStatus('Testing server...');
+    async function testServer() {
+        updateStatus('Testing servers...');
         
-        fetch('http://localhost:3000/api/test')
-            .then(response => response.json())
-            .then(data => {
-                updateStatus('Server OK - Opening dashboard');
-                window.open('http://localhost:3000', '_blank');
-                setTimeout(() => {
-                    updateStatus('Ready');
-                }, 2000);
-            })
-            .catch(error => {
-                updateStatus('Server offline');
-                console.error('Server test failed:', error);
-            });
+        const server = await findActiveServer();
+        if (server) {
+            updateStatus('Server OK - Opening dashboard');
+            window.open(activeServer, '_blank');
+            setTimeout(() => {
+                updateStatus('Ready');
+            }, 2000);
+        } else {
+            updateStatus('All servers offline');
+        }
     }
     
     function closePopup() {
@@ -273,4 +307,11 @@ function initializePopupFunctionality() {
         }
         screenshots = [];
     }
+    
+    // Initialize by finding active server
+    findActiveServer().then(server => {
+        if (server) {
+            console.log(`Extension initialized with server: ${server}`);
+        }
+    });
 }

@@ -28,6 +28,6 @@
   ],
   "host_permissions": [
     "http://localhost:3000/*",
-    "https://your-render-url.onrender.com/*"
+    "https://reference-to-context-solver.onrender.com/*"
   ]
 }

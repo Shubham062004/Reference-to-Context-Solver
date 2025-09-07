@@ -9,8 +9,39 @@ const PORT = process.env.PORT || 3000;
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI('AIzaSyDXMQKNaQtKx2lBZAcpHplCxW2H-la6EAA');
 
+// Define allowed origins for CORS
+const allowedOrigins = [
+    'https://reference-to-context-solver.onrender.com',
+    'http://localhost:3000', 
+    'chrome-extension://*' // Allow Chrome extensions
+];
+
+// Base URL for API calls
+const BASE_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://reference-to-context-solver.onrender.com' 
+    : 'http://localhost:3000';
+
+// Enhanced CORS middleware
+app.use(cors({
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like curl, Postman, Chrome extensions)
+        if (!origin) return callback(null, true);
+        
+        // Check if origin matches allowed origins or is a Chrome extension
+        if (allowedOrigins.some(allowed => 
+            origin === allowed || 
+            (allowed.includes('*') && origin.startsWith('chrome-extension://'))
+        )) {
+            return callback(null, true);
+        }
+        
+        console.log('CORS blocked origin:', origin);
+        return callback(null, true); // Allow all for now, you can restrict later
+    },
+    credentials: true
+}));
+
 // Middleware
-app.use(cors());
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({limit: '50mb', extended: true}));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -20,34 +51,29 @@ let extractedData = [];
 
 // Helper function to convert base64 to buffer for Gemini
 function base64ToBuffer(base64String) {
-    // Remove data URL prefix if present
     const base64Data = base64String.replace(/^data:image\/[a-z]+;base64,/, '');
     return Buffer.from(base64Data, 'base64');
 }
 
 // Helper function to clean Gemini response and extract JSON
 function cleanGeminiResponse(responseText) {
-    console.log('Raw Gemini response:', responseText);
+    console.log('Raw Gemini response length:', responseText.length);
     
-    // Remove markdown code blocks if present
     let cleaned = responseText.trim();
     
-    // Remove ```json or ``` at the beginning
+    // Remove markdown code blocks if present
     if (cleaned.startsWith('```json')) {
         cleaned = cleaned.substring(7);
     } else if (cleaned.startsWith('```')) {
         cleaned = cleaned.substring(3);
     }
     
-    // Remove ``` at the end
     if (cleaned.endsWith('```')) {
         cleaned = cleaned.substring(0, cleaned.length - 3);
     }
     
-    // Trim whitespace
     cleaned = cleaned.trim();
-    
-    console.log('Cleaned response:', cleaned);
+    console.log('Cleaned response ready for parsing');
     return cleaned;
 }
 
@@ -56,7 +82,16 @@ app.get('/api/test', (req, res) => {
     res.json({
         status: 'Server is running', 
         timestamp: new Date().toISOString(),
-        geminiConnected: true
+        geminiConnected: true,
+        baseUrl: BASE_URL,
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+app.get('/api/base-url', (req, res) => {
+    res.json({ 
+        baseUrl: BASE_URL,
+        environment: process.env.NODE_ENV || 'development'
     });
 });
 
@@ -129,7 +164,6 @@ Return only the JSON object, nothing else.`;
             extractedContent = JSON.parse(cleanedText);
         } catch (parseError) {
             console.error('Failed to parse cleaned Gemini response:', parseError);
-            console.error('Cleaned text that failed to parse:', cleanedText);
             
             // Fallback: try to extract JSON from the response manually
             const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
@@ -150,10 +184,9 @@ Return only the JSON object, nothing else.`;
             throw new Error('Invalid response structure: missing questions array');
         }
         
-        // Extract answers in the requested format (just the answer text, not the letter)
+        // Extract answers in the requested format
         const answers = extractedContent.questions.map(q => {
             if (q.correct_option) {
-                // Extract just the answer text after the letter and parenthesis
                 const match = q.correct_option.match(/^[A-D]\)\s*(.+)$/);
                 return match ? match[1] : q.correct_option;
             }
@@ -167,13 +200,13 @@ Return only the JSON object, nothing else.`;
             questions: extractedContent.questions || [],
             answers: answers,
             screenshotCount: screenshots.length,
-            aiProvider: 'Gemini'
+            aiProvider: 'Gemini',
+            processedOn: BASE_URL
         };
         
         extractedData.push(extractedMCQ);
         
         console.log(`Successfully processed ${extractedContent.questions.length} questions`);
-        console.log('Extracted answers:', answers);
         
         res.json({
             success: true,
@@ -194,7 +227,6 @@ app.get('/api/data', (req, res) => {
     res.json(extractedData);
 });
 
-// Clear data endpoint
 app.post('/api/clear', (req, res) => {
     extractedData = [];
     res.json({success: true, message: 'Data cleared'});
@@ -205,8 +237,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Dashboard available at http://localhost:${PORT}`);
+    console.log(`Dashboard available at ${BASE_URL}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log('Gemini AI integration ready');
 });
